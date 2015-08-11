@@ -1,6 +1,7 @@
 #!/bin/bash
 
 DEBUG_MODE=false
+DATE=$(date +'%Y-%m-%d')
 
 # no arguments needed
 function usage()
@@ -55,3 +56,12 @@ if [ $? -ne 0 ] ; then
 	echo -e "Can't Get information from AWS:\n$AWS_EC2_TEST" 1>&2
 fi
 
+# function takes instance name as an argument
+# function return instance id
+function get_instance_id()
+{
+	aws ec2 describe-instances --filter "Name=tag:Name,Values=$1" --query 'Reservations[*].Instances[*].InstanceId' | tr -d '"' | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//'
+}
+
+INSTANCE_ID=$(get_instance_id $INSTANCE_NAME)
+echo $INSTANCE_ID
