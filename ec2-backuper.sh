@@ -5,19 +5,21 @@ DEBUG_MODE=false
 # no arguments needed
 function usage()
 {
-	echo -e "$(basename $0): script for ec2 instance backup as AMI\n"
-	echo -e "usage:\n$(basename $0) [-i <instance name>] [-n <number of backups>] [-d] [-h]"
-	echo -e "-i\tinstance name to backup"
-	echo -e "-n\tnumber of backups to keep"
+	echo -e "\n$(basename $0): script for ec2 instance backup as AMI\n"
+	echo -e "usage:\n$(basename $0) [-n <instance name>] [-b <number of backups>] [-p <aws profile>] [-d] [-h]"
+	echo -e "-n\tinstance name to backup"
+	echo -e "-b\tnumber of backups to keep"
+	echo -e "-p\taws-cli profile - specify if it's different than default"
 	echo -e "-d\tbash debug mode enabled"
 	echo -e "-h\thelp"
 }
 
-while getopts :i:n:dh OPTION;
+while getopts :n:b:p:dh OPTION;
 do
    case ${OPTION} in
-      i) INSTANCE_NAME=${OPTARG} ;;
-      n) NUMBER_OF_BACKUPS=${OPTARG} ;;
+      n) INSTANCE_NAME=${OPTARG} ;;
+      b) NUMBER_OF_BACKUPS=${OPTARG} ;;
+      p) AWS_PROFILE=${OPTARG} ;;
       d) DEBUG_MODE=true ;;
       h) usage ; exit 0;;
       :) echo "Option -${OPTARG} requires an argument"; usage ; exit 1;;
@@ -25,13 +27,25 @@ do
    esac
 done
 
+if [ -z $INSTANCE_NAME ] ; then
+	echo "instance name is mandatory"
+	exit 1
+	usage
+fi
+
+if [ -z $NUMBER_OF_BACKUPS ] ; then
+	echo "number of backups is mandatory"
+	exit 1
+	usage
+fi
+
 if [ $DEBUG_MODE = true ] ; then
 	set -x
 fi
 
-aws --version &> /dev/null
+which aws &> /dev/null
 if [ $? -ne 0 ] ; then
-	echo "aws is not installed" 1>&2
+	echo "aws-cli is not installed" 1>&2
 	exit 1
 fi
 
