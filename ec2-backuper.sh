@@ -80,7 +80,21 @@ function create_ami_from_instance()
 # function return all ebs snapshots from AMI
 function get_snapshots_id_from_ami()
 {
-	aws ec2 describe-images --filter "Name=image-id,Values=$1" --query Images[*].BlockDeviceMappings[*].Ebs.SnapshotId | tr -d '"' | tr -d ',' | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//'
+	aws $AWS_ARG ec2 describe-images --filter "Name=image-id,Values=$1" --query Images[*].BlockDeviceMappings[*].Ebs.SnapshotId | tr -d '"' | tr -d ',' | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//'
+}
+
+# no arguments needed
+# function list all instance AMIs
+function get_all_ami_names()
+{
+	aws $AWS_ARG ec2 describe-images --filter "Name=name,Values=$INSTANCE_NAME*" --query Images[*].Name | tr -d '"' | tr -d ',' | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//' | sort
+}
+
+# function take ami name as an argument
+# function return ami id
+function get_ami_id()
+{
+	aws ec2 describe-images --filter "Name=name,Values=$1" --query Images[*].ImageId  | tr -d '"' | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//'
 }
 
 INSTANCE_ID=$(get_instance_id $INSTANCE_NAME)
@@ -93,3 +107,21 @@ SNAPSHOTS_IDS=$(get_snapshots_id_from_ami $AMI_ID)
 for SNAP_ID in $SNAPSHOTS_IDS; do
 	aws ec2 create-tags --resources $SNAP_ID --tags Key=Name,Value="$INSTANCE_NAME"-"$DATE"' '"$AMI_DESCRIPTION"
 done
+
+ALL_BACKUP_AMI_NAMES=$(get_all_ami_names)
+
+NUMBER_OF_AMIS=$(echo $ALL_BACKUP_AMI_NAMES | wc -w)
+NUMBER_OF_BACKUPS_TO_DELETE=$((NUMBER_OF_AMIS-NUMBER_OF_BACKUPS))
+
+if [ $NUMBER_OF_BACKUPS_TO_DELETE -gt 0 ] ; then
+	ALL_AMI_NAMES_TO_DELETE=$(echo $ALL_BACKUP_AMI_NAMES | tr ' ' '\n' | sed -n "1,$NUMBER_OF_BACKUPS_TO_DELETE"p)
+	for AMI_NAME_TO_DELETE in $ALL_AMI_NAMES_TO_DELETE; do
+		AMI_ID_TO_DELETE=$(get_ami_id $AMI_NAME_TO_DELETE)
+		echo "aws $AWS_ARG ec2 deregister-image --image-id $AMI_ID_TO_DELETE"
+		ALL_SNAPSHOTS_IDS_TO_DELETE=$(get_snapshots_id_from_ami $AMI_ID_TO_DELETE)
+		for SNAP_ID_TO_DEL in $ALL_SNAPSHOTS_IDS_TO_DELETE; do
+			echo "aws $AWS_ARG ec2 delete-snapshot --snapshot-id $SNAP_ID_TO_DEL"
+		done
+	done
+fi
+
