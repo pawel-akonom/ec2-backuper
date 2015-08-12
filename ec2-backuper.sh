@@ -101,6 +101,13 @@ INSTANCE_ID=$(get_instance_id $INSTANCE_NAME)
 
 AMI_ID=$(create_ami_from_instance $INSTANCE_ID)
 
+# waiting for ami creation
+AMI_STATUS=$(aws $AWS_ARG ec2 describe-images --image-ids "$AMI_ID" --query 'Images[*].State' | tr -d '"' | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//')
+if [ "$AMI_STATUS" != "available" ] ; then
+	sleep 5
+	AMI_STATUS=$(aws $AWS_ARG ec2 describe-images --image-ids "$AMI_ID" --query 'Images[*].State' | tr -d '"' | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//')
+fi
+
 SNAPSHOTS_IDS=$(get_snapshots_id_from_ami $AMI_ID)
 
 # create Name tags for new ebs snapshots
@@ -117,10 +124,10 @@ if [ $NUMBER_OF_BACKUPS_TO_DELETE -gt 0 ] ; then
 	ALL_AMI_NAMES_TO_DELETE=$(echo $ALL_BACKUP_AMI_NAMES | tr ' ' '\n' | sed -n "1,$NUMBER_OF_BACKUPS_TO_DELETE"p)
 	for AMI_NAME_TO_DELETE in $ALL_AMI_NAMES_TO_DELETE; do
 		AMI_ID_TO_DELETE=$(get_ami_id $AMI_NAME_TO_DELETE)
-		echo "aws $AWS_ARG ec2 deregister-image --image-id $AMI_ID_TO_DELETE"
+		aws $AWS_ARG ec2 deregister-image --image-id $AMI_ID_TO_DELETE
 		ALL_SNAPSHOTS_IDS_TO_DELETE=$(get_snapshots_id_from_ami $AMI_ID_TO_DELETE)
 		for SNAP_ID_TO_DEL in $ALL_SNAPSHOTS_IDS_TO_DELETE; do
-			echo "aws $AWS_ARG ec2 delete-snapshot --snapshot-id $SNAP_ID_TO_DEL"
+			aws $AWS_ARG ec2 delete-snapshot --snapshot-id $SNAP_ID_TO_DEL
 		done
 	done
 fi
