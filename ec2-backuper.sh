@@ -1,8 +1,5 @@
 #!/bin/bash
 
-DATE=$(date +'%Y-%m-%d')
-AWS_ARG=""
-
 # no arguments needed
 function usage()
 {
@@ -28,6 +25,10 @@ do
    esac
 done
 
+DATE=$(date +'%Y-%m-%d')
+AWS_ARG=""
+AMI_NAME="$INSTANCE_NAME"-"$DATE"
+
 if [ -z $INSTANCE_NAME ] ; then
 	echo "instance name is mandatory"
 	exit 1
@@ -50,7 +51,7 @@ if [ $? -ne 0 ] ; then
 	exit 2
 fi
 
-WS_EC2_TEST=$(aws ec2 describe-vpcs 2>&1)
+AWS_EC2_TEST=$(aws ec2 describe-vpcs 2>&1)
 if [ $? -ne 0 ] ; then
 	AWS_EC2_TEST=$(echo "$AWS_EC2_TEST" | tr -d '\n')
 	echo -e "Can't Get information from AWS:\n$AWS_EC2_TEST" 1>&2
@@ -69,9 +70,9 @@ function get_instance_id()
 function create_ami_from_instance()
 {
 	if ! [ -z "$AMI_DESCRIPTION" ]; then
-		aws $AWS_ARG ec2 create-image --instance-id "$1" --name "$INSTANCE_NAME"-"$DATE" --description "$AMI_DESCRIPTION" | tr -d '"'  | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//' | awk '{print $2}'
+		aws $AWS_ARG ec2 create-image --instance-id "$1" --name "$AMI_NAME" --description "$AMI_DESCRIPTION" | tr -d '"'  | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//' | awk '{print $2}'
 	else
-		aws $AWS_ARG ec2 create-image --instance-id "$1" --name "$INSTANCE_NAME"-"$DATE" | tr -d '"'  | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//' | awk '{print $2}'
+		aws $AWS_ARG ec2 create-image --instance-id "$1" --name "$AMI_NAME" | tr -d '"'  | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//' | awk '{print $2}'
 	fi
 }
 
@@ -79,7 +80,7 @@ function create_ami_from_instance()
 # function return all ebs snapshots from AMI
 function get_snapshots_id_from_ami()
 {
-	aws $AWS_ARG ec2 describe-images --filter "Name=image-id,Values=$1" --query Images[*].BlockDeviceMappings[*].Ebs.SnapshotId | tr -d '"' | tr -d ',' | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//'
+	aws $AWS_ARG ec2 describe-images --image-ids "$1" --query Images[*].BlockDeviceMappings[*].Ebs.SnapshotId | tr -d '"' | tr -d ',' | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//'
 }
 
 # no arguments needed
@@ -97,38 +98,61 @@ function get_ami_id()
 }
 
 INSTANCE_ID=$(get_instance_id $INSTANCE_NAME)
+echo "$INSTANCE_NAME instance id: $INSTANCE_ID"
 
+echo "creating AMI: $AMI_NAME"
 AMI_ID=$(create_ami_from_instance $INSTANCE_ID)
+echo "AMI id: $AMI_ID" 
 
 # waiting for snapshots
+echo "waiting for EBS snapshots"
 SNAPSHOTS_IDS=$(get_snapshots_id_from_ami $AMI_ID)
 while [ $(echo $SNAPSHOTS_IDS | wc -w) == 0 ]; do
 	sleep 5
+	echo -n "."
 	SNAPSHOTS_IDS=$(get_snapshots_id_from_ami $AMI_ID)
 	AMI_STATUS=$(aws $AWS_ARG ec2 describe-images --image-ids "$AMI_ID" --query 'Images[*].State' | tr -d '"' | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//')
 	if [ $AMI_STATUS == "failed" ] ; then
+		echo -e "\ncreating AMI failed"
 		exit 3
 	fi
 done
 
+echo -e "\nAMI snapshots: $SNAPSHOTS_IDS"
+
 # create Name tags for new ebs snapshots
 for SNAP_ID in $SNAPSHOTS_IDS; do
-	aws ec2 create-tags --resources $SNAP_ID --tags Key=Name,Value="$INSTANCE_NAME"-"$DATE"' '"$AMI_DESCRIPTION"
+	SNAP_NAME="$INSTANCE_NAME"-"$DATE"' '"$AMI_DESCRIPTION"
+	aws ec2 create-tags --resources $SNAP_ID --tags Key=Name,Value="$SNAP_NAME"
+	echo "$SNAP_ID name: $SNAP_NAME"
 done
 
 ALL_BACKUP_AMI_NAMES=$(get_all_ami_names)
+# Sometimes already created AMI is not visible on the list
+# Add current AMI if is missing
+echo $ALL_BACKUP_AMI_NAMES | grep $AMI_NAME > /dev/null
+if [ $? -ne 0 ] ; then
+	ALL_BACKUP_AMI_NAMES="$ALL_BACKUP_AMI_NAMES $AMI_NAME"
+fi
+
 NUMBER_OF_AMIS=$(echo $ALL_BACKUP_AMI_NAMES | wc -w)
 NUMBER_OF_BACKUPS_TO_DELETE=$((NUMBER_OF_AMIS-NUMBER_OF_BACKUPS))
+
+echo "number of AMI backups: $NUMBER_OF_AMIS"
 
 if [ $NUMBER_OF_BACKUPS_TO_DELETE -gt 0 ] ; then
 	ALL_AMI_NAMES_TO_DELETE=$(echo $ALL_BACKUP_AMI_NAMES | tr ' ' '\n' | sed -n "1,$NUMBER_OF_BACKUPS_TO_DELETE"p)
 	for AMI_NAME_TO_DELETE in $ALL_AMI_NAMES_TO_DELETE; do
 		AMI_ID_TO_DELETE=$(get_ami_id $AMI_NAME_TO_DELETE)
-		aws $AWS_ARG ec2 deregister-image --image-id $AMI_ID_TO_DELETE
+		echo "deregistering AMI: $AMI_NAME_TO_DELETE"
+		echo "$AMI_NAME_TO_DELETE AMI id: $AMI_ID_TO_DELETE"
 		ALL_SNAPSHOTS_IDS_TO_DELETE=$(get_snapshots_id_from_ami $AMI_ID_TO_DELETE)
+		aws $AWS_ARG ec2 deregister-image --image-id $AMI_ID_TO_DELETE
 		for SNAP_ID_TO_DEL in $ALL_SNAPSHOTS_IDS_TO_DELETE; do
+			echo "deleting snapshot: $SNAP_ID_TO_DEL"
 			aws $AWS_ARG ec2 delete-snapshot --snapshot-id $SNAP_ID_TO_DEL
 		done
 	done
 fi
 
+echo ""
