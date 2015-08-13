@@ -1,6 +1,5 @@
 #!/bin/bash
 
-DEBUG_MODE=false
 DATE=$(date +'%Y-%m-%d')
 AWS_ARG=""
 
@@ -101,14 +100,16 @@ INSTANCE_ID=$(get_instance_id $INSTANCE_NAME)
 
 AMI_ID=$(create_ami_from_instance $INSTANCE_ID)
 
-# waiting for ami creation
-AMI_STATUS=$(aws $AWS_ARG ec2 describe-images --image-ids "$AMI_ID" --query 'Images[*].State' | tr -d '"' | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//')
-if [ "$AMI_STATUS" != "available" ] ; then
-	sleep 5
-	AMI_STATUS=$(aws $AWS_ARG ec2 describe-images --image-ids "$AMI_ID" --query 'Images[*].State' | tr -d '"' | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//')
-fi
-
+# waiting for snapshots
 SNAPSHOTS_IDS=$(get_snapshots_id_from_ami $AMI_ID)
+while [ $(echo $SNAPSHOTS_IDS | wc -w) == 0 ]; do
+	sleep 5
+	SNAPSHOTS_IDS=$(get_snapshots_id_from_ami $AMI_ID)
+	AMI_STATUS=$(aws $AWS_ARG ec2 describe-images --image-ids "$AMI_ID" --query 'Images[*].State' | tr -d '"' | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//')
+	if [ $AMI_STATUS == "failed" ] ; then
+		exit 3
+	fi
+done
 
 # create Name tags for new ebs snapshots
 for SNAP_ID in $SNAPSHOTS_IDS; do
@@ -116,7 +117,6 @@ for SNAP_ID in $SNAPSHOTS_IDS; do
 done
 
 ALL_BACKUP_AMI_NAMES=$(get_all_ami_names)
-
 NUMBER_OF_AMIS=$(echo $ALL_BACKUP_AMI_NAMES | wc -w)
 NUMBER_OF_BACKUPS_TO_DELETE=$((NUMBER_OF_AMIS-NUMBER_OF_BACKUPS))
 
