@@ -3,7 +3,7 @@
 # no arguments needed
 function usage()
 {
-	echo -e "\n$(basename $0): script for ec2 instance backup as AMI\n"
+	echo -e "\n$(basename $0): script for AWS EC2 instance backup as AMI\n"
 	echo -e "usage:\n$(basename $0) [-n <instance name>] [-b <number of backups>] [-p <aws profile>] [-d <AMI description>] [-h]"
 	echo -e "-n\tinstance name to backup"
 	echo -e "-b\tnumber of backups to keep"
@@ -31,14 +31,20 @@ AMI_NAME="$INSTANCE_NAME"-"$DATE"
 
 if [ -z $INSTANCE_NAME ] ; then
 	echo "instance name is mandatory"
-	exit 1
 	usage
+	exit 1
 fi
 
 if [ -z $NUMBER_OF_BACKUPS ] ; then
 	echo "number of backups is mandatory"
-	exit 1
 	usage
+	exit 1
+fi
+
+if [ $NUMBER_OF_BACKUPS -le 0 ] ; then
+	echo "Number of backups have to be greather than 0"
+	usage
+	exit 1
 fi
 
 if ! [ -z $AWS_PROFILE ]; then
@@ -98,6 +104,12 @@ function get_ami_id()
 }
 
 INSTANCE_ID=$(get_instance_id $INSTANCE_NAME)
+
+if [ -z $INSTANCE_ID ]; then
+	echo "EC2 Instance $INSTANCE_NAME not found"
+	exit 2
+fi
+
 echo "$INSTANCE_NAME instance id: $INSTANCE_ID"
 
 echo "creating AMI: $AMI_NAME"
