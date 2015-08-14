@@ -3,7 +3,7 @@
 # no arguments needed
 function usage()
 {
-	echo -e "\n$(basename $0): script for AWS EC2 instance backup as AMI\n"
+	echo -e "\n$(basename $0): script for ec2 instance backup as AMI\n"
 	echo -e "usage:\n$(basename $0) [-n <instance name>] [-b <number of backups>] [-p <aws profile>] [-d <AMI description>] [-h]"
 	echo -e "-n\tinstance name to backup"
 	echo -e "-b\tnumber of backups to keep"
@@ -31,20 +31,14 @@ AMI_NAME="$INSTANCE_NAME"-"$DATE"
 
 if [ -z $INSTANCE_NAME ] ; then
 	echo "instance name is mandatory"
-	usage
 	exit 1
+	usage
 fi
 
 if [ -z $NUMBER_OF_BACKUPS ] ; then
 	echo "number of backups is mandatory"
-	usage
 	exit 1
-fi
-
-if [ $NUMBER_OF_BACKUPS -le 0 ] ; then
-	echo "Number of backups have to be greather than 0"
 	usage
-	exit 1
 fi
 
 if ! [ -z $AWS_PROFILE ]; then
@@ -104,12 +98,6 @@ function get_ami_id()
 }
 
 INSTANCE_ID=$(get_instance_id $INSTANCE_NAME)
-
-if [ -z $INSTANCE_ID ]; then
-	echo "EC2 Instance $INSTANCE_NAME not found"
-	exit 2
-fi
-
 echo "$INSTANCE_NAME instance id: $INSTANCE_ID"
 
 echo "creating AMI: $AMI_NAME"
@@ -151,7 +139,10 @@ NUMBER_OF_AMIS=$(echo $ALL_BACKUP_AMI_NAMES | wc -w)
 NUMBER_OF_BACKUPS_TO_DELETE=$((NUMBER_OF_AMIS-NUMBER_OF_BACKUPS))
 
 echo "number of AMI backups: $NUMBER_OF_AMIS"
-echo "number of AMI to remove: $NUMBER_OF_BACKUPS_TO_DELETE" 
+
+if [ $NUMBER_OF_BACKUPS_TO_DELETE -gt 0 ]; then
+	echo "number of AMI to remove: $NUMBER_OF_BACKUPS_TO_DELETE"
+fi
 
 if [ $NUMBER_OF_BACKUPS_TO_DELETE -gt 0 ] ; then
 	ALL_AMI_NAMES_TO_DELETE=$(echo $ALL_BACKUP_AMI_NAMES | tr ' ' '\n' | sed -n "1,$NUMBER_OF_BACKUPS_TO_DELETE"p)
