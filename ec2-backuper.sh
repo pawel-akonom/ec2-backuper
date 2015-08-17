@@ -62,7 +62,7 @@ fi
 # function return instance id
 function get_instance_id()
 {
-	aws $AWS_ARG ec2 describe-instances --filter "Name=tag:Name,Values=$1" --query 'Reservations[*].Instances[*].InstanceId' | tr -d '"' | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//'
+	aws $AWS_ARG ec2 describe-instances --filter "Name=tag:Name,Values=$1" --query 'Reservations[*].Instances[*].InstanceId' --output text
 }
 
 # function take instance id as an agrument
@@ -70,9 +70,9 @@ function get_instance_id()
 function create_ami_from_instance()
 {
 	if ! [ -z "$AMI_DESCRIPTION" ]; then
-		aws $AWS_ARG ec2 create-image --instance-id "$1" --name "$AMI_NAME" --description "$AMI_DESCRIPTION" | tr -d '"'  | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//' | awk '{print $2}'
+		aws $AWS_ARG ec2 create-image --instance-id "$1" --name "$AMI_NAME" --description "$AMI_DESCRIPTION" --output text
 	else
-		aws $AWS_ARG ec2 create-image --instance-id "$1" --name "$AMI_NAME" | tr -d '"'  | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//' | awk '{print $2}'
+		aws $AWS_ARG ec2 create-image --instance-id "$1" --name "$AMI_NAME" --output text
 	fi
 }
 
@@ -80,21 +80,21 @@ function create_ami_from_instance()
 # function return all ebs snapshots from AMI
 function get_snapshots_id_from_ami()
 {
-	aws $AWS_ARG ec2 describe-images --image-ids "$1" --query Images[*].BlockDeviceMappings[*].Ebs.SnapshotId | tr -d '"' | tr -d ',' | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//'
+	aws $AWS_ARG ec2 describe-images --image-ids "$1" --query Images[*].BlockDeviceMappings[*].Ebs.SnapshotId --output text
 }
 
 # no arguments needed
 # function list all instance AMIs
 function get_all_ami_names()
 {
-	aws $AWS_ARG ec2 describe-images --filter "Name=name,Values=$INSTANCE_NAME*" --query Images[*].Name | tr -d '"' | tr -d ',' | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//' | sort
+	aws $AWS_ARG ec2 describe-images --filter "Name=name,Values=$INSTANCE_NAME*" --query Images[*].Name --output text | sort
 }
 
 # function take ami name as an argument
 # function return ami id
 function get_ami_id()
 {
-	aws ec2 describe-images --filter "Name=name,Values=$1" --query Images[*].ImageId  | tr -d '"' | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//'
+	aws ec2 describe-images --filter "Name=name,Values=$1" --query Images[*].ImageId --output text
 }
 
 INSTANCE_ID=$(get_instance_id $INSTANCE_NAME)
@@ -111,7 +111,7 @@ while [ $(echo $SNAPSHOTS_IDS | wc -w) == 0 ]; do
 	sleep 5
 	echo -n "."
 	SNAPSHOTS_IDS=$(get_snapshots_id_from_ami $AMI_ID)
-	AMI_STATUS=$(aws $AWS_ARG ec2 describe-images --image-ids "$AMI_ID" --query 'Images[*].State' | tr -d '"' | egrep [[:alnum:]] | sed -e 's/[[:space:]]*//')
+	AMI_STATUS=$(aws $AWS_ARG ec2 describe-images --image-ids "$AMI_ID" --query 'Images[*].State' --output text)
 	if [ $AMI_STATUS == "failed" ] ; then
 		echo -e "\ncreating AMI failed"
 		exit 3
