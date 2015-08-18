@@ -51,7 +51,7 @@ if [ $? -ne 0 ] ; then
 	exit 2
 fi
 
-AWS_EC2_TEST=$(aws ec2 describe-vpcs 2>&1)
+AWS_EC2_TEST=$(aws $AWS_ARG ec2 describe-vpcs 2>&1)
 if [ $? -ne 0 ] ; then
 	AWS_EC2_TEST=$(echo "$AWS_EC2_TEST" | tr -d '\n')
 	echo -e "Can't Get information from AWS:\n$AWS_EC2_TEST" 1>&2
