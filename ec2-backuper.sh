@@ -4,20 +4,22 @@
 function usage()
 {
 	echo -e "\n$(basename $0): script for ec2 instance backup as AMI\n"
-	echo -e "usage:\n$(basename $0) [-n <instance name>] [-b <number of backups>] [-p <aws profile>] [-d <AMI description>] [-h]"
+	echo -e "usage:\n$(basename $0) [-n <instance name>] [-b <number of backups>] [-p <aws profile>] [-r <aws region>] [-d <AMI description>] [-h]"
 	echo -e "-n\tinstance name to backup"
 	echo -e "-b\tnumber of backups to keep"
 	echo -e "-p\taws-cli profile - specify if it's different than default"
+	echo -e "-r\taws region - specify if it's different than default"
 	echo -e "-d\tAMI description"
 	echo -e "-h\thelp"
 }
 
-while getopts :n:b:p:d:h OPTION;
+while getopts :n:b:p:r:d:h OPTION;
 do
    case ${OPTION} in
       n) INSTANCE_NAME=${OPTARG} ;;
       b) NUMBER_OF_BACKUPS=${OPTARG} ;;
       p) AWS_PROFILE="${OPTARG}" ;;
+      r) AWS_REGION="${OPTARG}" ;;
       d) AMI_DESCRIPTION=${OPTARG} ;;
       h) usage ; exit 0;;
       :) echo "Option -${OPTARG} requires an argument"; usage ; exit 1;;
@@ -42,7 +44,11 @@ if [ -z $NUMBER_OF_BACKUPS ] ; then
 fi
 
 if ! [ -z $AWS_PROFILE ]; then
-	AWS_ARG="--profile $AWS_PROFILE"
+	AWS_ARG="$AWS_ARG --profile $AWS_PROFILE"
+fi
+
+if ! [ -z $AWS_REGION ]; then
+	AWS_ARG="$AWS_ARG --region $AWS_REGION"
 fi
 
 which aws &> /dev/null
@@ -94,7 +100,7 @@ function get_all_ami_names()
 # function return ami id
 function get_ami_id()
 {
-	aws ec2 describe-images --filter "Name=name,Values=$1" --query Images[*].ImageId --output text
+	aws $AWS_ARG ec2 describe-images --filter "Name=name,Values=$1" --query Images[*].ImageId --output text
 }
 
 INSTANCE_ID=$(get_instance_id $INSTANCE_NAME)
